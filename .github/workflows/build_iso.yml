@@ -1,5 +1,5 @@
-```yaml id="v8m2qs"
-name: Ultimate Custom Bazzite ISO
+```yaml id="f0u4zd"
+name: Stable Gaming ISO Builder
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ permissions:
 
 env:
   IMAGE_NAME: custom-bazzite
-  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  REGISTRY: ghcr.io
 
 jobs:
 
@@ -19,66 +19,55 @@ jobs:
 
     steps:
 
-      - name: Free Disk Space
+      - name: Cleanup Runner
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/local/.ghcup
           docker system prune -af || true
+          podman system prune -af || true
           df -h
 
-      - name: Checkout Repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install Podman
         run: |
-          sudo apt-get update
+          sudo apt update
 
-          sudo apt-get install -y \
+          sudo apt install -y \
             podman \
             skopeo \
             curl \
             wget \
             git
 
-      - name: Login To GHCR
+      - name: Login GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | \
           podman login ghcr.io \
-          -u ${{ github.actor }} \
+          -u "${{ github.actor }}" \
           --password-stdin
 
       - name: Create Containerfile
         run: |
           cat > Containerfile << 'EOF'
-          FROM ghcr.io/ublue-os/bazzite-gnome:stable
+          FROM ghcr.io/ublue-os/bazzite:stable
 
           RUN rpm-ostree install \
               mangohud \
               gamescope \
-              vkbasalt \
               gamemode \
+              vkbasalt \
               steam-devices \
-              goverlay \
-              lact \
-              coolercontrol \
-              wget \
-              curl \
-              git \
-              vim \
-              nano \
               fastfetch \
-              htop
-
-          RUN mkdir -p /etc/systemd/system/getty@tty1.service.d
-
-          RUN printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin bazzite --noclear %%I $TERM\n' \
-              > /etc/systemd/system/getty@tty1.service.d/override.conf
-
-          RUN systemctl enable podman.socket
-          RUN systemctl enable bluetooth
-          RUN systemctl enable cups
-          RUN systemctl enable sshd
+              htop \
+              git \
+              curl \
+              wget \
+              vim \
+              nano
 
           RUN flatpak remote-add --if-not-exists flathub \
               https://flathub.org/repo/flathub.flatpakrepo
@@ -87,20 +76,22 @@ jobs:
               com.discordapp.Discord \
               com.obsproject.Studio \
               org.videolan.VLC \
-              com.usebottles.bottles \
-              io.github.mimbrero.WhatsAppDesktop \
-              org.mozilla.firefox \
-              com.spotify.Client
+              org.mozilla.firefox
 
-          RUN mkdir -p /usr/share/backgrounds/custom
+          RUN mkdir -p /etc/systemd/system/getty@tty1.service.d
 
-          RUN echo "Custom Bazzite Build"
+          RUN printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin bazzite --noclear %%I $TERM\n' \
+          > /etc/systemd/system/getty@tty1.service.d/override.conf
+
+          RUN systemctl enable bluetooth || true
+          RUN systemctl enable podman.socket || true
 
           EOF
 
-      - name: Build Custom Image
+      - name: Build Image
         run: |
           podman build \
+            --storage-driver=vfs \
             --pull=newer \
             -t ghcr.io/${{ github.repository_owner }}/custom-bazzite:latest \
             .
@@ -116,15 +107,17 @@ jobs:
 
     steps:
 
-      - name: Free Disk Space
+      - name: Cleanup Runner
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/local/.ghcup
           docker system prune -af || true
+          podman system prune -af || true
           df -h
 
-      - name: Checkout Repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build ISO
@@ -141,31 +134,25 @@ jobs:
           version: 41
           variant: Kinoite
 
-          iso_name: custom-bazzite-gaming.iso
+          iso_name: custom-bazzite.iso
 
           enable_cache_dnf: "false"
           enable_cache_skopeo: "false"
-
-          enrollment_password: universalblue
 
       - name: Prepare Upload
         run: |
           mkdir upload
 
-          mv \
-          ${{ steps.build.outputs.iso_path }}/*.iso \
-          upload/
+          find "${{ steps.build.outputs.iso_path }}" -name "*.iso" -exec mv {} upload/ \;
 
-          mv \
-          ${{ steps.build.outputs.iso_path }}/*CHECKSUM \
-          upload/ || true
+          find "${{ steps.build.outputs.iso_path }}" -name "*CHECKSUM*" -exec mv {} upload/ \; || true
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
 
         with:
-          name: custom-bazzite-gaming-iso
+          name: custom-bazzite-iso
           path: upload
-          compression-level: 0
           overwrite: true
+          compression-level: 0
 ```
